@@ -1,0 +1,10 @@
+{
+  "name": "freeze123",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "frontend:install": "npm install --prefix src/frontend",
+    "frontend:dev": "npm run dev --prefix src/frontend",
+    "frontend:build": "npm run build --prefix src/frontend"
+  }
+}
