@@ -1,250 +1,472 @@
 <script>
-const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8000";
+const STORAGE_KEY = "freeze123-room-session";
 
 const translations = {
   en: {
     title: "Red Light, Green Light",
-    subtitle: "Sprint on green. Freeze on red. Reach the finish line before you get caught moving.",
-    start: "Start Game",
-    restart: "Restart",
+    subtitle:
+      "Create a room, bring in real players, then fill the rest with bots that actually feel different.",
+    createRoom: "Create Room",
+    openCreateRoom: "New Room",
+    closeModal: "Close",
+    joinRoom: "Join Room",
+    availableRooms: "Open Rooms",
+    browseRooms: "Browse joinable rooms and jump in without sharing a code first.",
+    joinPrompt: "Choose your player name once, then join any room below.",
+    refreshRooms: "Refresh Rooms",
+    noRooms: "No joinable rooms yet. Create one to get the lobby started.",
+    roomHost: "Host",
+    roomHumans: "Humans",
+    roomBots: "Bots",
+    roomSlots: "Players",
+    quickJoin: "Join This Room",
+    startRace: "Start Race",
+    leaveRoom: "Leave Room",
     loading: "Loading",
-    shortcut: "Enter to start / Space to move",
+    roomCode: "Room Code",
+    playerName: "Player Name",
+    difficulty: "Bot Difficulty",
+    botCount: "Bot Count",
+    easy: "Easy",
+    normal: "Normal",
+    hard: "Hard",
+    waitingRoom: "Waiting Room",
+    roomReady: "Share the room code and start when everyone is ready.",
     currentCall: "Current Call",
-    timerHidden: "Timer hidden",
     waiting: "Waiting",
+    idle: "Lobby",
     greenLight: "Green Light",
     redLight: "Red Light",
-    status: "Status",
-    notStarted: "Not Started",
+    roomStatus: "Room",
     running: "Running",
-    won: "Won",
-    lost: "Lost",
+    finished: "Finished",
+    ready: "Ready",
     progress: "Progress",
     moves: "Moves",
-    roundResult: "Round Result",
-    ready: "Ready",
-    inProgress: "In Progress",
-    victory: "Victory",
-    gameOver: "Game Over",
-    readyDetail: "Start a new round when ready.",
-    runningDetail: "of the track completed.",
-    wonDetail: "You won in {moves} moves.",
-    lostDetail: "Move {moves} happened during red light.",
-    messageStart: "Press Start. Move on green light. Stop on red light.",
-    messageWon: "You reached the finish line. You win!",
-    messageLost: "You moved on red light. Try again.",
-    messageGreen: "Move now!",
-    messageRed: "Freeze. Do not move.",
-    startError: "Could not start. Please make sure the FastAPI backend is running.",
-    moveError: "Could not submit the move. Please try again.",
-    syncError: "Could not sync game state.",
+    place: "Place",
+    racers: "Racers",
+    leaderboard: "Leaderboard",
+    result: "Result",
+    finishedLabel: "Finished",
+    lostLabel: "Out",
+    runningLabel: "On Track",
+    waitingLabel: "Waiting",
     watcher: "Watcher",
     finish: "Finish",
     startLine: "Start",
     moveButton: "Move 10m",
-    howToPlay: "How to Play",
-    howToPlayText: "Click Move or press Space only during green light.",
-    win: "Win",
-    winText: "Reach 100% progress to cross the finish line.",
-    lose: "Lose",
-    loseText: "Moving during red light ends the round immediately.",
-    player: "Player",
-    faceReady: ":)",
-    faceWin: "^_^",
-    faceLose: "x_x",
-    gestureWin: "VICTORY",
-    gestureLose: "CAUGHT",
+    moveHint: "Space or Right Arrow to move",
+    hostBadge: "Host",
+    youBadge: "You",
+    botBadge: "BOT",
+    humanBadge: "Human",
+    placeFmt: "#{place}",
+    gameWon: "Finished",
+    gameLost: "Caught",
+    gameRunning: "Keep moving only on green.",
+    gameWaiting: "Waiting for the host to start.",
+    resultWon: "You finished in place #{place}.",
+    resultLost: "You were caught. Final place #{place}.",
+    resultWaiting: "The room is still gathering players.",
+    createError: "Could not create the room.",
+    joinError: "Could not join the room.",
+    startError: "Could not start the room.",
+    moveError: "Could not submit the move.",
+    restoreError: "Could not restore the last room session.",
+    roomPlayers: "Players in Room",
+    noSession: "Create a room or join one with a room code.",
     english: "English",
-    chinese: "\u4e2d\u6587",
+    chinese: "中文",
   },
   zh: {
-    title: "\u4e00\u4e8c\u4e09\u6728\u5934\u4eba",
-    subtitle: "\u7eff\u706f\u51b2\u523a\uff0c\u7ea2\u706f\u5b9a\u4f4f\u3002\u5230\u8fbe\u7ec8\u70b9\u5c31\u83b7\u80dc\uff0c\u7ea2\u706f\u4e71\u52a8\u5c31\u51fa\u5c40\u3002",
-    start: "\u5f00\u59cb\u6e38\u620f",
-    restart: "\u91cd\u65b0\u5f00\u59cb",
-    loading: "\u8bf7\u7a0d\u5019",
-    shortcut: "Enter \u5f00\u59cb / Space \u524d\u8fdb",
-    currentCall: "\u5f53\u524d\u53e3\u4ee4",
-    timerHidden: "\u8ba1\u65f6\u5df2\u9690\u85cf",
-    waiting: "\u7b49\u5f85\u5f00\u59cb",
-    greenLight: "\u7eff\u706f",
-    redLight: "\u7ea2\u706f",
-    status: "\u72b6\u6001",
-    notStarted: "\u672a\u5f00\u59cb",
-    running: "\u8fdb\u884c\u4e2d",
-    won: "\u80dc\u5229",
-    lost: "\u5931\u8d25",
-    progress: "\u8fdb\u5ea6",
-    moves: "\u79fb\u52a8\u6b21\u6570",
-    roundResult: "\u672c\u5c40\u7ed3\u679c",
-    ready: "\u51c6\u5907\u5c31\u7eea",
-    inProgress: "\u6311\u6218\u8fdb\u884c\u4e2d",
-    victory: "\u80dc\u5229",
-    gameOver: "\u6e38\u620f\u7ed3\u675f",
-    readyDetail: "\u51c6\u5907\u597d\u540e\u5f00\u59cb\u65b0\u7684\u4e00\u5c40\u3002",
-    runningDetail: "\u8def\u7a0b\u5df2\u5b8c\u6210\u3002",
-    wonDetail: "\u4f60\u7528 {moves} \u6b21\u79fb\u52a8\u5230\u8fbe\u7ec8\u70b9\u3002",
-    lostDetail: "\u7b2c {moves} \u6b21\u79fb\u52a8\u53d1\u751f\u5728\u7ea2\u706f\u9636\u6bb5\u3002",
-    messageStart: "\u70b9\u51fb\u5f00\u59cb\u3002\u7eff\u706f\u65f6\u524d\u8fdb\uff0c\u7ea2\u706f\u65f6\u505c\u4e0b\u3002",
-    messageWon: "\u4f60\u6210\u529f\u5230\u8fbe\u7ec8\u70b9\uff0c\u80dc\u5229\uff01",
-    messageLost: "\u4f60\u5728\u7ea2\u706f\u65f6\u79fb\u52a8\u4e86\uff0c\u518d\u6765\u4e00\u5c40\u5427\u3002",
-    messageGreen: "\u73b0\u5728\u53ef\u4ee5\u524d\u8fdb\uff01",
-    messageRed: "\u6728\u5934\u4eba\uff0c\u4e0d\u8981\u52a8\u3002",
-    startError: "\u542f\u52a8\u5931\u8d25\uff0c\u8bf7\u786e\u8ba4 FastAPI \u540e\u7aef\u6b63\u5728\u8fd0\u884c\u3002",
-    moveError: "\u63d0\u4ea4\u52a8\u4f5c\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002",
-    syncError: "\u540c\u6b65\u6e38\u620f\u72b6\u6001\u5931\u8d25\u3002",
-    watcher: "\u6728\u5934\u4eba",
-    finish: "\u7ec8\u70b9",
-    startLine: "\u8d77\u70b9",
-    moveButton: "\u524d\u8fdb 10 \u7c73",
-    howToPlay: "\u73a9\u6cd5",
-    howToPlayText: "\u53ea\u80fd\u5728\u7eff\u706f\u9636\u6bb5\u70b9\u51fb\u524d\u8fdb\u6216\u6309 Space\u3002",
-    win: "\u80dc\u5229",
-    winText: "\u8fdb\u5ea6\u5230\u8fbe 100% \u5373\u53ef\u51b2\u8fc7\u7ec8\u70b9\u3002",
-    lose: "\u5931\u8d25",
-    loseText: "\u7ea2\u706f\u9636\u6bb5\u79fb\u52a8\u4f1a\u7acb\u5373\u7ed3\u675f\u672c\u5c40\u3002",
-    player: "\u73a9\u5bb6",
-    faceReady: ":)",
-    faceWin: "^_^",
-    faceLose: "x_x",
-    gestureWin: "\u80dc\u5229",
-    gestureLose: "\u88ab\u6293",
+    title: "一二三木头人",
+    subtitle: "现在可以真建房了。先拉真人进房，再用不同难度的机器人把赛道补满。",
+    createRoom: "创建房间",
+    openCreateRoom: "新建房间",
+    closeModal: "关闭",
+    joinRoom: "加入房间",
+    availableRooms: "可加入房间",
+    browseRooms: "查看还没开赛的房间，不用先拿到房间号也能直接加入。",
+    joinPrompt: "先设置你的昵称，然后从下面任选一个房间加入。",
+    refreshRooms: "刷新房间",
+    noRooms: "暂时还没有可加入的房间，可以先创建一个。",
+    roomHost: "房主",
+    roomHumans: "真人",
+    roomBots: "机器人",
+    roomSlots: "玩家数",
+    quickJoin: "加入这个房间",
+    startRace: "开始比赛",
+    leaveRoom: "离开房间",
+    loading: "请稍候",
+    roomCode: "房间号",
+    playerName: "玩家昵称",
+    difficulty: "机器人难度",
+    botCount: "机器人数量",
+    easy: "简单",
+    normal: "普通",
+    hard: "困难",
+    waitingRoom: "等待室",
+    roomReady: "把房间号发给朋友，大家到齐后再开始。",
+    currentCall: "当前口令",
+    waiting: "等待中",
+    idle: "大厅中",
+    greenLight: "绿灯",
+    redLight: "红灯",
+    roomStatus: "房间状态",
+    running: "进行中",
+    finished: "已结束",
+    ready: "准备中",
+    progress: "进度",
+    moves: "移动次数",
+    place: "名次",
+    racers: "参赛者",
+    leaderboard: "排行榜",
+    result: "本场结果",
+    finishedLabel: "已完成",
+    lostLabel: "出局",
+    runningLabel: "比赛中",
+    waitingLabel: "等待开始",
+    watcher: "木头人",
+    finish: "终点",
+    startLine: "起点",
+    moveButton: "前进 10 米",
+    moveHint: "按 Space 或右方向键前进",
+    hostBadge: "房主",
+    youBadge: "你",
+    botBadge: "BOT",
+    humanBadge: "真人",
+    placeFmt: "第 {place} 名",
+    gameWon: "成功冲线",
+    gameLost: "被抓到了",
+    gameRunning: "只在绿灯时前进，稳住节奏。",
+    gameWaiting: "等待房主开始比赛。",
+    resultWon: "你以第 {place} 名完成比赛。",
+    resultLost: "你被抓到了，最终排名第 {place} 名。",
+    resultWaiting: "房间还在等人，准备好就能开跑。",
+    createError: "创建房间失败。",
+    joinError: "加入房间失败。",
+    startError: "开始比赛失败。",
+    moveError: "提交动作失败。",
+    restoreError: "恢复上次房间失败。",
+    roomPlayers: "房间成员",
+    noSession: "你可以先创建房间，或者输入房间号加入。",
     english: "English",
-    chinese: "\u4e2d\u6587",
+    chinese: "中文",
   },
 };
+
+function websocketBaseUrl() {
+  if (API_BASE.startsWith("http://")) return API_BASE.replace("http://", "ws://");
+  if (API_BASE.startsWith("https://")) return API_BASE.replace("https://", "wss://");
+  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+  return `${protocol}://127.0.0.1:8000`;
+}
 
 export default {
   data() {
     return {
-      game: null,
+      language: "zh",
       loading: false,
       error: "",
-      poller: null,
-      clock: Date.now(),
-      clockTimer: null,
-      language: "en",
+      room: null,
+      roomList: [],
+      session: null,
+      socket: null,
+      reconnectTimer: null,
+      showCreateModal: false,
+      createForm: {
+        playerName: "",
+        botCount: 2,
+        botDifficulty: "normal",
+      },
+      joinForm: {
+        playerName: "",
+      },
     };
   },
   computed: {
     t() {
       return translations[this.language];
     },
-    hasGame() {
-      return Boolean(this.game);
+    hasRoom() {
+      return Boolean(this.room && this.session);
+    },
+    myPlayer() {
+      if (!this.hasRoom) return null;
+      return this.room.players.find((player) => player.player_id === this.session.playerId) ?? null;
+    },
+    isHost() {
+      return this.hasRoom && this.room.host_player_id === this.session.playerId;
+    },
+    canStart() {
+      return this.hasRoom && this.room.room_status === "waiting" && this.isHost && !this.loading;
     },
     canMove() {
-      return this.hasGame && this.game.status === "running" && !this.loading;
+      return (
+        this.hasRoom &&
+        this.room.room_status === "running" &&
+        this.myPlayer?.status === "running" &&
+        !this.loading
+      );
     },
     lightText() {
-      if (!this.hasGame) return this.t.waiting;
-      return this.game.light === "green" ? this.t.greenLight : this.t.redLight;
+      if (!this.hasRoom) return this.t.waiting;
+      const map = {
+        idle: this.t.idle,
+        green: this.t.greenLight,
+        red: this.t.redLight,
+      };
+      return map[this.room.light] ?? this.t.waiting;
     },
     lightClass() {
-      if (!this.hasGame) return "idle";
-      return this.game.light === "green" ? "green" : "red";
+      if (!this.hasRoom) return "idle";
+      return this.room.light;
     },
-    statusText() {
-      if (!this.hasGame) return this.t.notStarted;
+    roomStatusText() {
+      if (!this.hasRoom) return this.t.waiting;
       const map = {
+        waiting: this.t.ready,
         running: this.t.running,
-        won: this.t.won,
-        lost: this.t.lost,
+        finished: this.t.finished,
       };
-      return map[this.game.status] || this.game.status;
-    },
-    moveCount() {
-      return this.hasGame ? this.game.move_count : 0;
-    },
-    playerPosition() {
-      return this.hasGame ? this.game.player_position : 0;
-    },
-    finishPosition() {
-      return this.hasGame ? this.game.finish_position : 100;
+      return map[this.room.room_status] ?? this.room.room_status;
     },
     progressPercent() {
-      return Math.min(100, Math.round((this.playerPosition / this.finishPosition) * 100));
+      return this.myPlayer?.progress_percent ?? 0;
     },
-    playerStyle() {
-      return { left: `${this.progressPercent}%` };
+    moveCount() {
+      return this.myPlayer?.move_count ?? 0;
     },
-    playerStateClass() {
-      if (!this.hasGame) return "ready";
-      return this.game.status;
+    myPlace() {
+      return this.myPlayer?.place ?? null;
     },
-    playerFace() {
-      if (!this.hasGame || this.game.status === "running") return this.t.faceReady;
-      return this.game.status === "won" ? this.t.faceWin : this.t.faceLose;
+    racerCount() {
+      return this.room?.players.length ?? 0;
     },
-    gestureText() {
-      if (!this.hasGame || this.game.status === "running") return "";
-      return this.game.status === "won" ? this.t.gestureWin : this.t.gestureLose;
+    botDifficultyLabel() {
+      if (!this.hasRoom) return "";
+      return this.t[this.room.bot_difficulty] ?? this.room.bot_difficulty;
     },
-    buttonText() {
-      if (this.loading) return this.t.loading;
-      return this.hasGame ? this.t.restart : this.t.start;
-    },
-    message() {
-      if (this.error) return this.error;
-      if (!this.hasGame) return this.t.messageStart;
-      if (this.game.status === "won") return this.t.messageWon;
-      if (this.game.status === "lost") return this.t.messageLost;
-      return this.game.light === "green" ? this.t.messageGreen : this.t.messageRed;
+    rankedPlayers() {
+      if (!this.hasRoom) return [];
+      return this.room.players.map((player, index) => ({
+        ...player,
+        laneIndex: index,
+        left: `${player.progress_percent}%`,
+        bottom: `${18 + index * 70}px`,
+        face: player.status === "won" ? "^_^" : player.status === "lost" ? "x_x" : ":)",
+        gesture: player.status === "won" ? this.t.gameWon : player.status === "lost" ? this.t.gameLost : "",
+      }));
     },
     resultTitle() {
-      if (!this.hasGame) return this.t.ready;
-      if (this.game.status === "running") return this.t.inProgress;
-      return this.game.status === "won" ? this.t.victory : this.t.gameOver;
+      if (!this.hasRoom) return this.t.waitingRoom;
+      if (this.myPlayer?.status === "won") return this.t.gameWon;
+      if (this.myPlayer?.status === "lost") return this.t.gameLost;
+      if (this.room.room_status === "waiting") return this.t.waitingRoom;
+      return this.t.running;
     },
     resultDetail() {
-      if (!this.hasGame) return this.t.readyDetail;
-      if (this.game.status === "won") {
-        return this.t.wonDetail.replace("{moves}", this.moveCount);
+      if (!this.hasRoom) return this.t.noSession;
+      if (this.myPlayer?.status === "won") {
+        return this.t.resultWon.replace("{place}", this.myPlace ?? "-");
       }
-      if (this.game.status === "lost") {
-        return this.t.lostDetail.replace("{moves}", this.moveCount);
+      if (this.myPlayer?.status === "lost") {
+        return this.t.resultLost.replace("{place}", this.myPlace ?? "-");
       }
-      return `${this.progressPercent}% ${this.t.runningDetail}`;
+      if (this.room.room_status === "waiting") return this.t.resultWaiting;
+      return this.t.gameRunning;
     },
-    phasePercent() {
-      if (!this.hasGame || this.game.status !== "running") return 0;
-
-      const startedAt = new Date(this.game.light_started_at).getTime();
-      const durationSeconds = Number(this.game.light_duration_seconds);
-      if (Number.isNaN(startedAt) || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
-        return 0;
-      }
-
-      const elapsedSeconds = (this.clock - startedAt) / 1000;
-      return Math.max(0, Math.min(100, (elapsedSeconds / durationSeconds) * 100));
+    controlMessage() {
+      if (this.error) return this.error;
+      if (!this.hasRoom) return this.t.noSession;
+      if (this.room.room_status === "waiting") return this.t.gameWaiting;
+      if (this.myPlayer?.status === "won") return this.t.resultWon.replace("{place}", this.myPlace ?? "-");
+      if (this.myPlayer?.status === "lost") return this.t.resultLost.replace("{place}", this.myPlace ?? "-");
+      return this.t.gameRunning;
     },
   },
   mounted() {
     window.addEventListener("keydown", this.handleKeydown);
-    this.clockTimer = window.setInterval(() => {
-      this.clock = Date.now();
-    }, 100);
+    this.restoreSession();
   },
   beforeUnmount() {
     window.removeEventListener("keydown", this.handleKeydown);
-    window.clearInterval(this.clockTimer);
-    this.stopPolling();
+    this.cleanupSocket();
+    if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
   },
   methods: {
     setLanguage(language) {
       this.language = language;
       this.error = "";
     },
-    async startGame() {
+    roomPlayerStatus(status) {
+      const map = {
+        waiting: this.t.waitingLabel,
+        running: this.t.runningLabel,
+        won: this.t.finishedLabel,
+        lost: this.t.lostLabel,
+      };
+      return map[status] ?? status;
+    },
+    placeText(place) {
+      if (!place) return "-";
+      return this.t.placeFmt.replace("{place}", place);
+    },
+    persistSession() {
+      if (!this.session) return;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.session));
+    },
+    clearSession() {
+      localStorage.removeItem(STORAGE_KEY);
+      this.session = null;
+      this.room = null;
+    },
+    cleanupSocket() {
+      if (this.socket) {
+        this.socket.onopen = null;
+        this.socket.onmessage = null;
+        this.socket.onclose = null;
+        this.socket.onerror = null;
+        this.socket.close();
+        this.socket = null;
+      }
+    },
+    async restoreSession() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        await this.fetchRoomList();
+        return;
+      }
+
+      try {
+        this.session = JSON.parse(raw);
+        await this.fetchRoom();
+        this.connectSocket();
+      } catch {
+        this.error = this.t.restoreError;
+        this.clearSession();
+        await this.fetchRoomList();
+      }
+    },
+    async handleSessionResponse(response, fallbackName) {
+      const payload = await this.readResponse(response);
+      this.room = payload.room;
+      this.session = {
+        playerId: payload.player_id,
+        roomCode: payload.room.room_code,
+        playerName: fallbackName,
+      };
+      this.persistSession();
+      this.connectSocket();
+    },
+    openCreateRoomModal() {
+      this.showCreateModal = true;
+      this.error = "";
+    },
+    closeCreateRoomModal() {
+      this.showCreateModal = false;
+    },
+    async createRoom() {
       this.loading = true;
       this.error = "";
       try {
-        const response = await fetch(`${API_BASE}/api/game/start`, {
+        const playerName = this.createForm.playerName || this.joinForm.playerName || "Player";
+        const response = await fetch(`${API_BASE}/api/rooms/create`, {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            player_name: playerName,
+            bot_count: this.createForm.botCount,
+            bot_difficulty: this.createForm.botDifficulty,
+          }),
         });
-        this.game = await this.readResponse(response);
-        this.startPolling();
-      } catch (error) {
+        await this.handleSessionResponse(response, playerName);
+        this.joinForm.playerName = playerName;
+        this.roomList = [];
+        this.showCreateModal = false;
+      } catch {
+        this.error = this.t.createError;
+      } finally {
+        this.loading = false;
+      }
+    },
+    async joinRoom(roomCode) {
+      this.loading = true;
+      this.error = "";
+      try {
+        const response = await fetch(`${API_BASE}/api/rooms/${roomCode}/join`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            player_name: this.joinForm.playerName || "Player",
+          }),
+        });
+        await this.handleSessionResponse(response, this.joinForm.playerName || "Player");
+        this.roomList = [];
+      } catch {
+        this.error = this.t.joinError;
+        await this.fetchRoomList();
+      } finally {
+        this.loading = false;
+      }
+    },
+    async fetchRoomList() {
+      if (this.hasRoom) return;
+      try {
+        const response = await fetch(`${API_BASE}/api/rooms`);
+        this.roomList = await this.readResponse(response);
+      } catch {
+        this.roomList = [];
+      }
+    },
+    async fetchRoom() {
+      if (!this.session) return;
+      const response = await fetch(
+        `${API_BASE}/api/rooms/${this.session.roomCode}?player_id=${this.session.playerId}`,
+      );
+      this.room = await this.readResponse(response);
+    },
+    connectSocket() {
+      if (!this.session) return;
+
+      this.cleanupSocket();
+      const url = `${websocketBaseUrl()}/ws/rooms/${this.session.roomCode}?player_id=${this.session.playerId}`;
+      this.socket = new WebSocket(url);
+
+      this.socket.onmessage = (event) => {
+        const payload = JSON.parse(event.data);
+        if (payload.type === "room_state") {
+          this.room = payload.room;
+        }
+      };
+
+      this.socket.onclose = () => {
+        this.socket = null;
+        if (!this.session) return;
+        this.reconnectTimer = window.setTimeout(async () => {
+          try {
+            await this.fetchRoom();
+            this.connectSocket();
+          } catch {
+            this.error = this.t.restoreError;
+          }
+        }, 1000);
+      };
+    },
+    async startRoom() {
+      if (!this.canStart) return;
+
+      this.loading = true;
+      this.error = "";
+      try {
+        const response = await fetch(`${API_BASE}/api/rooms/${this.room.room_code}/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ player_id: this.session.playerId }),
+        });
+        this.room = await this.readResponse(response);
+      } catch {
         this.error = this.t.startError;
       } finally {
         this.loading = false;
@@ -256,28 +478,27 @@ export default {
       this.loading = true;
       this.error = "";
       try {
-        const response = await fetch(`${API_BASE}/api/game/${this.game.game_id}/action`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "move", distance: 10 }),
-        });
-        this.game = await this.readResponse(response);
-        if (this.game.status !== "running") this.stopPolling();
-      } catch (error) {
+        const response = await fetch(
+          `${API_BASE}/api/rooms/${this.room.room_code}/players/${this.session.playerId}/move`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ distance: 10 }),
+          },
+        );
+        this.room = await this.readResponse(response);
+      } catch {
         this.error = this.t.moveError;
       } finally {
         this.loading = false;
       }
     },
-    async refreshGame() {
-      if (!this.hasGame || this.game.status !== "running") return;
-
-      try {
-        const response = await fetch(`${API_BASE}/api/game/${this.game.game_id}`);
-        this.game = await this.readResponse(response);
-      } catch (error) {
-        this.error = this.t.syncError;
-      }
+    leaveRoom() {
+      this.cleanupSocket();
+      if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
+      this.error = "";
+      this.clearSession();
+      this.fetchRoomList();
     },
     async readResponse(response) {
       if (!response.ok) {
@@ -286,23 +507,17 @@ export default {
       return response.json();
     },
     handleKeydown(event) {
+      if (event.code === "Escape" && this.showCreateModal) {
+        event.preventDefault();
+        this.closeCreateRoomModal();
+      }
       if (event.code === "Space" || event.code === "ArrowRight") {
         event.preventDefault();
         this.movePlayer();
       }
-      if (event.code === "Enter" && !this.loading) {
+      if (event.code === "Enter" && this.canStart) {
         event.preventDefault();
-        this.startGame();
-      }
-    },
-    startPolling() {
-      this.stopPolling();
-      this.poller = window.setInterval(() => this.refreshGame(), 350);
-    },
-    stopPolling() {
-      if (this.poller) {
-        window.clearInterval(this.poller);
-        this.poller = null;
+        this.startRoom();
       }
     },
   },
@@ -336,111 +551,259 @@ export default {
             {{ t.chinese }}
           </button>
         </div>
-        <button class="primary" type="button" :disabled="loading" @click="startGame">
-          {{ buttonText }}
+        <button v-if="!hasRoom" class="secondary" type="button" @click="openCreateRoomModal">
+          {{ t.openCreateRoom }}
         </button>
-        <span class="shortcut">{{ t.shortcut }}</span>
+        <button v-else class="secondary" type="button" @click="leaveRoom">
+          {{ t.leaveRoom }}
+        </button>
       </div>
     </section>
 
-    <section class="game-layout">
-      <aside class="side-panel">
-        <div class="light-card" :class="lightClass">
-          <span class="label">{{ t.currentCall }}</span>
-          <strong>{{ lightText }}</strong>
-          <div class="phase-bar covered" aria-hidden="true">
-            <span class="mystery-fill"></span>
-            <span class="cover-strip"></span>
-          </div>
-          <small class="timer-note">{{ t.timerHidden }}</small>
-        </div>
-
-        <div class="stat-grid">
+    <section v-if="!hasRoom" class="lobby-grid single-column">
+      <article class="entry-card room-list-card">
+        <div class="card-head">
           <div>
-            <span class="label">{{ t.status }}</span>
-            <strong>{{ statusText }}</strong>
+            <span class="label">{{ t.availableRooms }}</span>
+            <h2>{{ t.availableRooms }}</h2>
           </div>
-          <div>
-            <span class="label">{{ t.progress }}</span>
-            <strong>{{ progressPercent }}%</strong>
-          </div>
-          <div>
-            <span class="label">{{ t.moves }}</span>
-            <strong>{{ moveCount }}</strong>
-          </div>
+          <button class="secondary compact" type="button" :disabled="loading" @click="fetchRoomList">
+            {{ t.refreshRooms }}
+          </button>
         </div>
-
-        <div class="result-box" :class="playerStateClass">
-          <span class="label">{{ t.roundResult }}</span>
-          <span class="result-face">{{ playerFace }}</span>
-          <strong>{{ resultTitle }}</strong>
-          <p>{{ resultDetail }}</p>
+        <p class="card-copy">{{ t.browseRooms }}</p>
+        <div class="form-stack join-inline">
+          <label class="field">
+            <span>{{ t.playerName }}</span>
+            <input v-model="joinForm.playerName" type="text" maxlength="24" />
+          </label>
+          <p class="join-prompt">{{ t.joinPrompt }}</p>
         </div>
-      </aside>
-
-      <section class="arena" :class="lightClass" aria-label="Game arena">
-        <div class="skyline">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-
-        <div class="doll" :class="lightClass">
-          <div class="doll-head">
-            <span class="hair"></span>
-            <span class="eye"></span>
-            <span class="eye"></span>
-          </div>
-          <div class="doll-body"></div>
-          <strong>{{ t.watcher }}</strong>
-        </div>
-
-        <div class="finish-line">
-          <span>{{ t.finish }}</span>
-        </div>
-
-        <div class="track">
-          <div class="track-fill" :style="{ width: progressPercent + '%' }"></div>
-          <div class="player" :class="playerStateClass" :style="playerStyle">
-            <span class="gesture" v-if="gestureText">{{ gestureText }}</span>
-            <span class="arm left-arm"></span>
-            <span class="arm right-arm"></span>
-            <span class="player-head"></span>
-            <span class="player-face">{{ playerFace }}</span>
-            <span class="player-body"></span>
+        <div v-if="roomList.length" class="room-list">
+          <div v-for="listedRoom in roomList" :key="listedRoom.room_code" class="room-list-item">
+            <div class="room-list-main">
+              <div>
+                <strong>{{ listedRoom.room_code }}</strong>
+                <span>{{ t.roomHost }}: {{ listedRoom.host_name }}</span>
+              </div>
+              <div class="room-list-meta">
+                <span>{{ t.roomHumans }} {{ listedRoom.human_count }}/4</span>
+                <span>{{ t.roomBots }} {{ listedRoom.bot_count }}</span>
+                <span>
+                  {{ t.difficulty }}
+                  {{ t[listedRoom.bot_difficulty] ?? listedRoom.bot_difficulty }}
+                </span>
+              </div>
+            </div>
+            <div class="room-list-actions">
+              <span class="room-slots">{{ t.roomSlots }} {{ listedRoom.total_players }}</span>
+              <button class="primary" type="button" :disabled="loading" @click="joinRoom(listedRoom.room_code)">
+                {{ t.quickJoin }}
+              </button>
+            </div>
           </div>
         </div>
+        <p v-else class="room-list-empty">{{ t.noRooms }}</p>
+      </article>
+    </section>
 
-        <div class="start-line">{{ t.startLine }}</div>
+    <template v-else>
+      <section class="room-banner">
+        <div>
+          <span class="label">{{ t.waitingRoom }}</span>
+          <strong>{{ room.room_code }}</strong>
+          <p>{{ t.roomReady }}</p>
+        </div>
+        <div class="room-badges">
+          <span class="pill">{{ t.difficulty }}: {{ botDifficultyLabel }}</span>
+          <span class="pill">{{ t.racers }}: {{ racerCount }}</span>
+          <button
+            v-if="canStart"
+            class="primary"
+            type="button"
+            :disabled="loading"
+            @click="startRoom"
+          >
+            {{ loading ? t.loading : t.startRace }}
+          </button>
+        </div>
       </section>
-    </section>
 
-    <section class="controls">
-      <button
-        class="move"
-        type="button"
-        :disabled="!canMove"
-        @click="movePlayer"
-        @touchstart.passive="movePlayer"
-      >
-        {{ t.moveButton }}
-      </button>
-      <p>{{ message }}</p>
-    </section>
+      <section class="game-layout">
+        <aside class="side-panel">
+          <div class="light-card" :class="lightClass">
+            <span class="label">{{ t.currentCall }}</span>
+            <strong>{{ lightText }}</strong>
+            <div class="phase-bar covered" aria-hidden="true">
+              <span class="mystery-fill"></span>
+              <span class="cover-strip"></span>
+            </div>
+          </div>
 
-    <section class="rules">
-      <div>
-        <strong>{{ t.howToPlay }}</strong>
-        <p>{{ t.howToPlayText }}</p>
-      </div>
-      <div>
-        <strong>{{ t.win }}</strong>
-        <p>{{ t.winText }}</p>
-      </div>
-      <div>
-        <strong>{{ t.lose }}</strong>
-        <p>{{ t.loseText }}</p>
-      </div>
-    </section>
+          <div class="stat-grid">
+            <div>
+              <span class="label">{{ t.roomStatus }}</span>
+              <strong>{{ roomStatusText }}</strong>
+            </div>
+            <div>
+              <span class="label">{{ t.place }}</span>
+              <strong>{{ placeText(myPlace) }}</strong>
+            </div>
+            <div>
+              <span class="label">{{ t.progress }}</span>
+              <strong>{{ progressPercent }}%</strong>
+            </div>
+            <div>
+              <span class="label">{{ t.moves }}</span>
+              <strong>{{ moveCount }}</strong>
+            </div>
+          </div>
+
+          <div class="result-box" :class="myPlayer?.status || 'ready'">
+            <span class="label">{{ t.result }}</span>
+            <strong>{{ resultTitle }}</strong>
+            <p>{{ resultDetail }}</p>
+          </div>
+
+          <div class="leaderboard-card">
+            <span class="label">{{ t.roomPlayers }}</span>
+            <div class="leaderboard-list">
+              <div
+                v-for="player in rankedPlayers"
+                :key="player.player_id"
+                class="leader-row"
+                :class="[player.player_type, player.status]"
+              >
+                <div class="leader-main">
+                  <strong>{{ player.name }}</strong>
+                  <div class="inline-badges">
+                    <span v-if="player.player_id === room.host_player_id" class="mini-pill">
+                      {{ t.hostBadge }}
+                    </span>
+                    <span v-if="player.player_id === session.playerId" class="mini-pill accent">
+                      {{ t.youBadge }}
+                    </span>
+                    <span v-else class="mini-pill">
+                      {{ player.player_type === 'bot' ? t.botBadge : t.humanBadge }}
+                    </span>
+                  </div>
+                </div>
+                <div class="leader-meta">
+                  <span>{{ placeText(player.place) }}</span>
+                  <span>{{ player.progress_percent }}%</span>
+                  <span>{{ roomPlayerStatus(player.status) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <section class="arena" :class="lightClass">
+          <div class="skyline">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+
+          <div class="doll" :class="lightClass">
+            <div class="doll-head">
+              <span class="hair"></span>
+              <span class="eye"></span>
+              <span class="eye"></span>
+            </div>
+            <div class="doll-body"></div>
+            <strong>{{ t.watcher }}</strong>
+          </div>
+
+          <div class="finish-line">
+            <span>{{ t.finish }}</span>
+          </div>
+
+          <div class="track track-grid">
+            <div
+              v-for="player in rankedPlayers"
+              :key="`${player.player_id}-lane`"
+              class="lane"
+              :style="{ bottom: `${player.laneIndex * 70}px` }"
+            ></div>
+            <div
+              v-for="player in rankedPlayers"
+              :key="player.player_id"
+              class="runner"
+              :class="[player.status, player.player_type]"
+              :style="{ left: player.left, bottom: player.bottom }"
+            >
+              <span v-if="player.gesture" class="gesture">{{ player.gesture }}</span>
+              <span class="runner-tag">
+                {{
+                  player.player_id === session.playerId
+                    ? t.youBadge
+                    : player.player_type === 'bot'
+                      ? t.botBadge
+                      : t.humanBadge
+                }}
+              </span>
+              <span class="arm left-arm"></span>
+              <span class="arm right-arm"></span>
+              <span class="player-head"></span>
+              <span class="player-face">{{ player.face }}</span>
+              <span class="player-body"></span>
+              <span class="runner-name">{{ player.name }}</span>
+            </div>
+          </div>
+
+          <div class="start-line">{{ t.startLine }}</div>
+        </section>
+      </section>
+
+      <section class="controls">
+        <button class="move" type="button" :disabled="!canMove" @click="movePlayer">
+          {{ t.moveButton }}
+        </button>
+        <p>{{ controlMessage }}</p>
+        <span class="shortcut">{{ t.moveHint }}</span>
+      </section>
+    </template>
+
+    <div v-if="showCreateModal && !hasRoom" class="modal-backdrop" @click.self="closeCreateRoomModal">
+      <section class="modal-card" role="dialog" aria-modal="true" :aria-label="t.createRoom">
+        <div class="modal-head">
+          <div>
+            <span class="label">{{ t.createRoom }}</span>
+            <h2>{{ t.createRoom }}</h2>
+          </div>
+          <button class="ghost-action" type="button" @click="closeCreateRoomModal">
+            {{ t.closeModal }}
+          </button>
+        </div>
+        <div class="form-stack">
+          <label class="field">
+            <span>{{ t.playerName }}</span>
+            <input v-model="createForm.playerName" type="text" maxlength="24" />
+          </label>
+          <label class="field">
+            <span>{{ t.botCount }}</span>
+            <select v-model.number="createForm.botCount">
+              <option :value="0">0</option>
+              <option :value="1">1</option>
+              <option :value="2">2</option>
+              <option :value="3">3</option>
+              <option :value="4">4</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>{{ t.difficulty }}</span>
+            <select v-model="createForm.botDifficulty">
+              <option value="easy">{{ t.easy }}</option>
+              <option value="normal">{{ t.normal }}</option>
+              <option value="hard">{{ t.hard }}</option>
+            </select>
+          </label>
+        </div>
+        <button class="primary full" type="button" :disabled="loading" @click="createRoom">
+          {{ loading ? t.loading : t.createRoom }}
+        </button>
+      </section>
+    </div>
   </main>
 </template>
