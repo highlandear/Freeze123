@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from random import choices, random, uniform
+from random import choices, random, sample, uniform
 from string import ascii_uppercase, digits
 from typing import Any, Literal
 from uuid import uuid4
@@ -20,12 +20,17 @@ MAX_BOTS = 4
 MAX_HUMANS = 4
 ROOM_CODE_LENGTH = 6
 BOT_NAMES = ("Bolt", "Pixel", "Comet", "Milo")
+GAME_MIN_DISTANCE = 3
+GAME_MAX_DISTANCE = 30
+GAME_SEGMENT_COUNT = 3
+GAME_TURN_MIN = 1
 
 PlayerStatus = Literal["waiting", "running", "won", "lost"]
 LightStatus = Literal["idle", "green", "red"]
 RoomStatus = Literal["waiting", "running", "finished"]
 PlayerType = Literal["human", "bot"]
 BotDifficulty = Literal["easy", "normal", "hard"]
+GameResult = Literal["win", "lose"]
 
 BOT_PROFILES: dict[BotDifficulty, dict[str, tuple[float, float] | float]] = {
     "easy": {
@@ -112,6 +117,46 @@ class MoveRequest(BaseModel):
     distance: int = Field(default=MOVE_STEP, ge=1, le=30)
 
 
+class GameConfigResponse(BaseModel):
+    min_distance: int
+    max_distance: int
+    segment_count: int
+    comparison_rule: str
+    random_min: int
+    random_max: int
+    distance_multipliers: dict[str, float]
+
+
+class GameCombinationResponse(BaseModel):
+    distance: int
+    segment_count: int
+    combinations: list[list[int]]
+
+
+class StartGameRequest(BaseModel):
+    target_distance: int = Field(ge=GAME_MIN_DISTANCE, le=GAME_MAX_DISTANCE)
+    segments: list[int] = Field(min_length=GAME_SEGMENT_COUNT, max_length=GAME_SEGMENT_COUNT)
+
+
+class GameComparison(BaseModel):
+    index: int
+    player: int
+    turn: int
+    passed: bool
+
+
+class GameRoundResponse(BaseModel):
+    game_id: str
+    target_distance: int
+    segments: list[int]
+    turn_values: list[int]
+    comparisons: list[GameComparison]
+    result: GameResult
+    multiplier: float
+    created_at: str
+    settled_at: str
+
+
 app = FastAPI(title="Freeze123 API", version="0.3.0")
 
 app.add_middleware(
@@ -131,6 +176,12 @@ rooms: dict[str, dict[str, Any]] = {}
 room_locks: dict[str, asyncio.Lock] = {}
 room_connections: dict[str, set[WebSocket]] = {}
 room_tasks: dict[str, asyncio.Task] = {}
+game_rounds: dict[str, dict[str, Any]] = {}
+
+DISTANCE_MULTIPLIERS = {
+    str(distance): round(1.0 + (distance - GAME_MIN_DISTANCE) * 0.2, 2)
+    for distance in range(GAME_MIN_DISTANCE, GAME_MAX_DISTANCE + 1)
+}
 
 
 def now_utc() -> datetime:
@@ -167,6 +218,94 @@ def generate_room_code() -> str:
 
 def clean_name(name: str) -> str:
     return name.strip()[:24]
+
+
+def validate_game_segments(target_distance: int, segments: list[int]) -> None:
+    if len(segments) != GAME_SEGMENT_COUNT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"segments must contain exactly {GAME_SEGMENT_COUNT} values",
+        )
+    if any(segment <= 0 for segment in segments):
+        raise HTTPException(status_code=400, detail="segments must all be positive integers")
+    if sum(segments) != target_distance:
+        raise HTTPException(status_code=400, detail="segments must sum to target_distance")
+
+
+def generate_distance_combinations(distance: int, parts: int = GAME_SEGMENT_COUNT) -> list[list[int]]:
+    combinations: list[list[int]] = []
+
+    def backtrack(remaining: int, slots_left: int, current: list[int]) -> None:
+        if slots_left == 1:
+            if remaining > 0:
+                combinations.append([*current, remaining])
+            return
+
+        max_value = remaining - (slots_left - 1)
+        for value in range(1, max_value + 1):
+            backtrack(remaining - value, slots_left - 1, [*current, value])
+
+    backtrack(distance, parts, [])
+    return combinations
+
+
+def build_turn_values(target_distance: int) -> list[int]:
+    if target_distance == GAME_SEGMENT_COUNT:
+        return list(range(GAME_TURN_MIN, target_distance + 1))
+
+    checkpoints = sample(range(GAME_TURN_MIN, target_distance), GAME_SEGMENT_COUNT - 1)
+    return [*sorted(checkpoints), target_distance]
+
+
+def get_distance_multiplier(distance: int) -> float:
+    return float(DISTANCE_MULTIPLIERS[str(distance)])
+
+
+def settle_game_round(target_distance: int, segments: list[int]) -> dict[str, Any]:
+    validate_game_segments(target_distance, segments)
+    turn_values = build_turn_values(target_distance)
+    comparisons = []
+    cumulative_distance = 0
+    for index, (segment, turn_value) in enumerate(zip(segments, turn_values, strict=True)):
+        cumulative_distance += segment
+        passed = cumulative_distance <= turn_value
+        comparisons.append(
+            {
+                "index": index + 1,
+                "player": cumulative_distance,
+                "turn": turn_value,
+                "passed": passed,
+            }
+        )
+        if not passed:
+            break
+    result: GameResult = "win" if all(item["passed"] for item in comparisons) else "lose"
+    timestamp = now_utc()
+    return {
+        "game_id": str(uuid4()),
+        "target_distance": target_distance,
+        "segments": segments,
+        "turn_values": turn_values,
+        "comparisons": comparisons,
+        "result": result,
+        "multiplier": get_distance_multiplier(target_distance),
+        "created_at": as_iso(timestamp),
+        "settled_at": as_iso(timestamp),
+    }
+
+
+def serialize_game_round(game_round: dict[str, Any]) -> GameRoundResponse:
+    return GameRoundResponse(
+        game_id=game_round["game_id"],
+        target_distance=game_round["target_distance"],
+        segments=game_round["segments"],
+        turn_values=game_round["turn_values"],
+        comparisons=[GameComparison(**comparison) for comparison in game_round["comparisons"]],
+        result=game_round["result"],
+        multiplier=game_round["multiplier"],
+        created_at=game_round["created_at"],
+        settled_at=game_round["settled_at"],
+    )
 
 
 def build_human_player(name: str, seat: int) -> dict[str, Any]:
@@ -531,6 +670,52 @@ def ensure_room_task(room_code: str) -> None:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/game/config", response_model=GameConfigResponse)
+def get_game_config_endpoint() -> GameConfigResponse:
+    return GameConfigResponse(
+        min_distance=GAME_MIN_DISTANCE,
+        max_distance=GAME_MAX_DISTANCE,
+        segment_count=GAME_SEGMENT_COUNT,
+        comparison_rule="less_than_or_equal",
+        random_min=GAME_TURN_MIN,
+        random_max=GAME_MAX_DISTANCE,
+        distance_multipliers=DISTANCE_MULTIPLIERS,
+    )
+
+
+@app.get("/api/game/combinations/{distance}", response_model=GameCombinationResponse)
+def get_game_combinations_endpoint(distance: int) -> GameCombinationResponse:
+    if not GAME_MIN_DISTANCE <= distance <= GAME_MAX_DISTANCE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"distance must be between {GAME_MIN_DISTANCE} and {GAME_MAX_DISTANCE}",
+        )
+
+    return GameCombinationResponse(
+        distance=distance,
+        segment_count=GAME_SEGMENT_COUNT,
+        combinations=generate_distance_combinations(distance),
+    )
+
+
+@app.post("/api/game/start", response_model=GameRoundResponse)
+def start_game_endpoint(payload: StartGameRequest) -> GameRoundResponse:
+    game_round = settle_game_round(
+        target_distance=payload.target_distance,
+        segments=payload.segments,
+    )
+    game_rounds[game_round["game_id"]] = game_round
+    return serialize_game_round(game_round)
+
+
+@app.get("/api/game/{game_id}", response_model=GameRoundResponse)
+def get_game_round_endpoint(game_id: str) -> GameRoundResponse:
+    game_round = game_rounds.get(game_id)
+    if game_round is None:
+        raise HTTPException(status_code=404, detail="Game not found")
+    return serialize_game_round(game_round)
 
 
 @app.get("/api/rooms", response_model=list[RoomListItem])

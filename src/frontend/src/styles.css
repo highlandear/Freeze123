@@ -151,6 +151,21 @@ h1 {
   justify-content: center;
 }
 
+.challenge-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.homepage-grid {
+  margin-bottom: 18px;
+}
+
+.room-home-section {
+  margin-top: 4px;
+}
+
 .entry-card,
 .room-banner,
 .leaderboard-card {
@@ -174,6 +189,53 @@ h1 {
   gap: 14px;
 }
 
+.challenge-setup-card,
+.challenge-result-card,
+.combo-card {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.solo-arena {
+  grid-column: 2;
+  grid-row: span 2;
+  min-height: 540px;
+}
+
+.solo-marker {
+  position: absolute;
+  bottom: 150px;
+  z-index: 2;
+  transform: translateX(-50%);
+}
+
+.solo-marker span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 2px solid #16211d;
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.92);
+  color: #16211d;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.solo-runner {
+  z-index: 3;
+}
+
+.solo-start-button {
+  position: absolute;
+  right: 22px;
+  bottom: 18px;
+  z-index: 6;
+  min-width: 164px;
+}
+
 .card-head {
   display: flex;
   align-items: flex-start;
@@ -195,6 +257,21 @@ h1 {
   font-weight: 700;
 }
 
+.distance-scale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #4b5b54;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.distance-scale strong {
+  color: #16211d;
+  font-size: 22px;
+}
+
 .compact {
   min-height: 38px;
   padding: 0 12px;
@@ -203,6 +280,28 @@ h1 {
 .room-list {
   display: grid;
   gap: 12px;
+}
+
+.combo-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.combo-chip {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 2px solid rgba(22, 33, 29, 0.16);
+  border-radius: 999px;
+  background: #fff;
+  color: #16211d;
+  font-weight: 900;
+}
+
+.combo-chip.active {
+  background: #16211d;
+  color: #fffaf0;
+  border-color: #16211d;
 }
 
 .room-list-item {
@@ -289,6 +388,38 @@ h1 {
 .modal-head h2 {
   margin: 8px 0 0;
   font-size: 28px;
+}
+
+.compact-stats strong {
+  font-size: 20px;
+}
+
+.attempt-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.attempt-expanded {
+  display: grid;
+  gap: 14px;
+}
+
+.attempt-detail-card {
+  padding: 14px;
+  border: 1px solid rgba(22, 33, 29, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.attempt-detail-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 22px;
+}
+
+.comparison-card {
+  padding: 16px;
 }
 
 .form-stack {
@@ -1025,7 +1156,8 @@ h1 {
   }
 
   .game-layout,
-  .lobby-grid {
+  .lobby-grid,
+  .challenge-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1266,6 +1398,10 @@ h1 {
   .room-list-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .attempt-detail-grid {
+    grid-template-columns: 1fr;
   }
 
   .compact,
