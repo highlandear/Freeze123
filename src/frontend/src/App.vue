@@ -1,6 +1,26 @@
 <script>
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8000";
 const STORAGE_KEY = "freeze123-room-session";
+const PLAYBACK_SPEEDS = {
+  slow: {
+    moveMs: 2700,
+    revealMs: 2100,
+    failMs: 2500,
+    initialDelayMs: 440,
+  },
+  normal: {
+    moveMs: 800,
+    revealMs: 650,
+    failMs: 850,
+    initialDelayMs: 150,
+  },
+  fast: {
+    moveMs: 550,
+    revealMs: 450,
+    failMs: 650,
+    initialDelayMs: 120,
+  },
+};
 
 const translations = {
   en: {
@@ -78,20 +98,28 @@ const translations = {
     challengeIntro:
       "Pick a target distance, choose one of the legal three-step splits, then compare your path against three random turn-backs.",
     targetDistance: "Target Distance",
+    playbackSpeed: "Move Speed",
+    speedSlow: "Slow",
+    speedNormal: "Normal",
+    speedFast: "Fast",
     rewardMultiplier: "Reward",
     combinationsTitle: "Step Splits",
     chosenSplit: "Chosen Split",
     randomWindow: "Turn-Back Range",
     startChallenge: "Run This Attempt",
     challengeSummary:
-      "Your three picks are stage distances. Each check compares cumulative distance against the matching turn-back point.",
+      "All three checks compare cumulative distance to the matching checkpoints, and reaching the finish line counts as a win.",
     noCombinations: "No legal splits yet.",
     latestAttempt: "Latest Attempt",
+    showLatestAttempt: "Show Latest Attempt",
+    hideLatestAttempt: "Hide Latest Attempt",
     showDetails: "Show Details",
     hideDetails: "Hide Details",
     attemptPending: "Pick a split and start a run to see the result here.",
     systemTurns: "Turn-Back Numbers",
     comparisons: "Step Checks",
+    cumulativeTag: "Cumulative",
+    segmentTag: "Cumulative",
     challengeWin: "You cleared all three looks.",
     challengeLose: "One of the steps got caught.",
     splitSeparator: " / ",
@@ -176,19 +204,27 @@ const translations = {
     challengeTitle: "一二三木头人",
     challengeIntro: "先选目标距离，再从合法三段组合里挑一种，然后和木头人的三次回头数值逐段对比。",
     targetDistance: "目标距离",
+    playbackSpeed: "移动速度",
+    speedSlow: "慢",
+    speedNormal: "标准",
+    speedFast: "快",
     rewardMultiplier: "奖励倍率",
     combinationsTitle: "三段组合",
     chosenSplit: "当前选择",
     randomWindow: "回头随机范围",
     startChallenge: "开始这一局",
-    challengeSummary: "只要三段都严格小于对应的回头数值，你就能赢。",
+    challengeSummary: "三段都用累计路程和回头点比较，玩家累计到达终点即判定获胜。",
     noCombinations: "当前没有可用组合。",
     latestAttempt: "最近一局",
+    showLatestAttempt: "显示最近一局",
+    hideLatestAttempt: "隐藏最近一局",
     showDetails: "展开详情",
     hideDetails: "收起详情",
     attemptPending: "先选一个组合并开始挑战，结果会显示在这里。",
     systemTurns: "木头人回头数值",
     comparisons: "逐段判定",
+    cumulativeTag: "累计",
+    segmentTag: "累计",
     challengeWin: "三段都安全通过，挑战成功。",
     challengeLose: "有一段被抓到，这局失败。",
     splitSeparator: " / ",
@@ -229,17 +265,24 @@ export default {
       gameConfig: null,
       gameCombinations: [],
       selectedDistance: 6,
+      selectedPlaybackSpeed: "slow",
       selectedSegments: null,
+      challengePlaybackLocked: false,
+      challengePlaybackInstantReset: false,
       latestAttempt: null,
+      latestAttemptVisible: false,
       latestAttemptExpanded: false,
       challengePlayback: {
         phase: "idle",
         progressPercent: 0,
         currentStepIndex: -1,
         currentSegment: null,
+        displayDistance: null,
         currentDistance: null,
         currentTurn: null,
         currentPassed: null,
+        currentMetric: null,
+        currentMoveMs: 0,
         result: null,
       },
       challengeTimers: [],
@@ -361,10 +404,20 @@ export default {
       if (!this.gameConfig) return "-";
       return `${this.gameConfig.distance_multipliers[String(this.selectedDistance)] ?? "-"}x`;
     },
+    playbackSpeedOptions() {
+      return [
+        { value: "slow", label: this.t.speedSlow },
+        { value: "normal", label: this.t.speedNormal },
+        { value: "fast", label: this.t.speedFast },
+      ];
+    },
+    playbackSpeedConfig() {
+      return PLAYBACK_SPEEDS[this.selectedPlaybackSpeed] ?? PLAYBACK_SPEEDS.normal;
+    },
     challengeSummaryText() {
       return this.language === "zh"
-        ? "你选的是每阶段距离，判定时会用累计路程与对应回头点比较，累计路程小于等于回头点即可通过。"
-        : "Your picks are stage distances. Each check compares cumulative distance to the matching checkpoint, and passing means cumulative distance is less than or equal to it.";
+        ? "三段判定都使用累计路程，最后一个回头值就是终点，玩家累计到达终点时直接获胜。"
+        : "All three checks use cumulative distance, and the final turn-back value is the finish line so reaching it wins the run.";
     },
     turnRangeText() {
       if (!this.gameConfig) return "-";
@@ -372,8 +425,11 @@ export default {
     },
     comparisonRuleText() {
       return this.language === "zh"
-        ? "累计路程小于等于回头点即可通过"
-        : "Cumulative distance must stay at or before the checkpoint";
+        ? "三段累计路程都必须小于等于对应回头点，累计到终点即获胜"
+        : "Each cumulative distance must stay at or before its checkpoint, and reaching the finish line wins";
+    },
+    metricTag() {
+      return this.t.cumulativeTag;
     },
     soloArenaClass() {
       if (this.challengePlayback.phase === "green") return "green";
@@ -398,6 +454,15 @@ export default {
     soloRunnerLeft() {
       return `${this.challengePlayback.progressPercent}%`;
     },
+    soloRunnerStyle() {
+      return {
+        left: this.soloRunnerLeft,
+        bottom: "24px",
+        "--runner-move-ms": this.challengePlaybackInstantReset
+          ? "0ms"
+          : `${this.challengePlayback.currentMoveMs || this.playbackSpeedConfig.moveMs}ms`,
+      };
+    },
     soloRunnerStatus() {
       if (this.challengePlayback.result === "win") return "won";
       if (this.challengePlayback.result === "lose") return "lost";
@@ -415,10 +480,19 @@ export default {
         this.challengePlayback.currentDistance !== null
       ) {
         const operator = this.challengePlayback.currentPassed === false ? ">" : "<=";
-        return `${this.challengePlayback.currentDistance} ${operator} ${this.challengePlayback.currentTurn}`;
+        return `${this.metricTag} ${this.challengePlayback.currentDistance} ${operator} ${this.challengePlayback.currentTurn}`;
       }
-      if (this.challengePlayback.currentDistance !== null) {
-        return `${this.challengePlayback.currentDistance}m`;
+      if (this.challengePlayback.displayDistance !== null) {
+        return `${this.challengePlayback.displayDistance}m`;
+      }
+      return this.selectedSegmentsText;
+    },
+    soloRunnerTag() {
+      if (this.challengePlayback.currentTurn !== null) {
+        return this.challengePlayback.result === "lose" ? this.t.failed : this.t.passed;
+      }
+      if (this.challengePlayback.displayDistance !== null) {
+        return `${this.challengePlayback.displayDistance}m`;
       }
       return this.selectedSegmentsText;
     },
@@ -522,18 +596,30 @@ export default {
       this.challengeTimers.forEach((timer) => window.clearTimeout(timer));
       this.challengeTimers = [];
     },
-    resetChallengePlayback() {
+    resetChallengePlayback(options = {}) {
+      const { keepLocked = false } = options;
       this.clearChallengePlaybackTimers();
-      this.challengePlayback = {
-        phase: "idle",
-        progressPercent: 0,
-        currentStepIndex: -1,
-        currentSegment: null,
-        currentDistance: null,
-        currentTurn: null,
-        currentPassed: null,
-        result: null,
-      };
+      this.challengePlaybackInstantReset = true;
+      this.challengePlaybackLocked = keepLocked ? this.challengePlaybackLocked : false;
+        this.challengePlayback = {
+          phase: "idle",
+          progressPercent: 0,
+          currentStepIndex: -1,
+          currentSegment: null,
+          displayDistance: null,
+          currentDistance: null,
+          currentTurn: null,
+          currentPassed: null,
+          currentMetric: null,
+          currentMoveMs: 0,
+          result: null,
+        };
+    },
+    enableChallengePlaybackTransitions(delayMs = 32) {
+      const timer = window.setTimeout(() => {
+        this.challengePlaybackInstantReset = false;
+      }, delayMs);
+      this.challengeTimers.push(timer);
     },
     queueChallengePlayback(callback, delayMs) {
       const timer = window.setTimeout(callback, delayMs);
@@ -704,15 +790,24 @@ export default {
       this.resetChallengePlayback();
     },
     playChallengeAttempt(attempt) {
-      this.resetChallengePlayback();
-      let cumulativeDistance = 0;
-      let timelineOffset = 150;
+      this.resetChallengePlayback({ keepLocked: true });
+      this.challengePlaybackLocked = true;
+      this.enableChallengePlaybackTransitions();
+      let previousDistance = 0;
+      const playbackSpeed = this.playbackSpeedConfig;
+      let timelineOffset = playbackSpeed.initialDelayMs;
 
       for (const [index, comparison] of attempt.comparisons.entries()) {
-        cumulativeDistance += attempt.segments[index];
+        const actualDistance = comparison.position;
+        const stageDistance = Math.max(0, actualDistance - previousDistance);
+        const travelledDistance = Math.max(0, actualDistance - previousDistance);
+        const movementRatio = stageDistance === 0 ? 0 : travelledDistance / stageDistance;
+        const movementMs = travelledDistance === 0
+          ? 0
+          : Math.max(180, Math.round(playbackSpeed.moveMs * (movementRatio || 1)));
         const progressPercent = Math.min(
           100,
-          Math.round((cumulativeDistance / attempt.target_distance) * 100),
+          Math.round((actualDistance / attempt.target_distance) * 100),
         );
 
         this.queueChallengePlayback(() => {
@@ -721,15 +816,18 @@ export default {
             phase: "green",
             currentStepIndex: index,
             currentSegment: attempt.segments[index],
-            currentDistance: comparison.player,
+            displayDistance: actualDistance,
+            currentDistance: null,
             currentTurn: null,
             currentPassed: null,
+            currentMetric: null,
+            currentMoveMs: movementMs,
             progressPercent,
             result: null,
           };
         }, timelineOffset);
 
-        timelineOffset += 650;
+        timelineOffset += movementMs;
 
         this.queueChallengePlayback(() => {
           this.challengePlayback = {
@@ -737,15 +835,19 @@ export default {
             phase: "red",
             currentStepIndex: index,
             currentSegment: attempt.segments[index],
+            displayDistance: actualDistance,
             currentDistance: comparison.player,
             currentTurn: comparison.turn,
             currentPassed: comparison.passed,
+            currentMetric: comparison.metric,
+            currentMoveMs: movementMs,
             progressPercent,
             result: comparison.passed ? null : "lose",
           };
         }, timelineOffset);
 
-        timelineOffset += comparison.passed ? 550 : 700;
+        timelineOffset += comparison.passed ? playbackSpeed.revealMs : playbackSpeed.failMs;
+        previousDistance = actualDistance;
 
         if (!comparison.passed) {
           break;
@@ -757,6 +859,10 @@ export default {
           ...this.challengePlayback,
           phase: "idle",
           result: attempt.result,
+          displayDistance:
+            attempt.result === "win"
+              ? attempt.target_distance
+              : this.challengePlayback.displayDistance,
           currentDistance:
             attempt.result === "win"
               ? attempt.target_distance
@@ -767,13 +873,18 @@ export default {
               : this.challengePlayback.currentTurn,
           currentPassed:
             attempt.result === "win" ? true : this.challengePlayback.currentPassed,
+          currentMetric: "cumulative",
+          currentMoveMs: this.challengePlayback.currentMoveMs,
           progressPercent:
             attempt.result === "win" ? 100 : this.challengePlayback.progressPercent,
         };
+        this.challengePlaybackLocked = false;
       }, timelineOffset);
     },
     async startChallenge() {
-      if (!this.selectedSegments) return;
+      if (!this.selectedSegments || this.challengePlaybackLocked) return;
+      this.resetChallengePlayback({ keepLocked: true });
+      this.challengePlaybackLocked = true;
       this.loading = true;
       this.error = "";
       try {
@@ -786,9 +897,11 @@ export default {
           }),
         });
         this.latestAttempt = await this.readResponse(response);
+        this.latestAttemptVisible = false;
         this.latestAttemptExpanded = false;
         this.playChallengeAttempt(this.latestAttempt);
       } catch {
+        this.challengePlaybackLocked = false;
         this.error = this.t.challengeError;
       } finally {
         this.loading = false;
@@ -797,6 +910,9 @@ export default {
     toggleLatestAttempt() {
       if (!this.latestAttempt) return;
       this.latestAttemptExpanded = !this.latestAttemptExpanded;
+    },
+    toggleLatestAttemptVisibility() {
+      this.latestAttemptVisible = !this.latestAttemptVisible;
     },
     formatSegments(segments) {
       return splitToText(segments, this.t.splitSeparator);
@@ -834,6 +950,12 @@ export default {
 
 <template>
   <main class="app-shell">
+    <div v-if="!hasRoom" class="page-debug-toggle">
+      <button class="ghost-action" type="button" @click="toggleLatestAttemptVisibility">
+        {{ latestAttemptVisible ? t.hideLatestAttempt : t.showLatestAttempt }}
+      </button>
+    </div>
+
     <section class="hero">
       <div class="hero-copy">
         <p class="eyebrow">{{ language === 'zh' ? '一二三木头人' : 'Freeze123' }}</p>
@@ -911,16 +1033,32 @@ export default {
           <input
             v-model.number="selectedDistance"
             type="range"
-            :min="gameConfig?.min_distance ?? 3"
+            :min="gameConfig?.min_distance ?? 6"
             :max="gameConfig?.max_distance ?? 30"
           />
         </label>
 
         <div class="distance-scale">
-          <span>{{ gameConfig?.min_distance ?? 3 }}</span>
+          <span>{{ gameConfig?.min_distance ?? 6 }}</span>
           <strong>{{ selectedDistance }}</strong>
           <span>{{ gameConfig?.max_distance ?? 30 }}</span>
         </div>
+
+        <label class="field">
+          <span>{{ t.playbackSpeed }}</span>
+          <div class="speed-chip-row">
+            <button
+              v-for="option in playbackSpeedOptions"
+              :key="option.value"
+              class="combo-chip speed-chip"
+              :class="{ active: selectedPlaybackSpeed === option.value }"
+              type="button"
+              @click="selectedPlaybackSpeed = option.value"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </label>
 
       </article>
 
@@ -980,20 +1118,10 @@ export default {
           <div
             class="runner solo-runner"
             :class="[soloRunnerStatus, 'human']"
-            :style="{ left: soloRunnerLeft, bottom: '24px' }"
+            :style="soloRunnerStyle"
           >
             <span class="gesture">{{ soloRunnerGesture }}</span>
-            <span class="runner-tag">
-              {{
-                challengePlayback.currentDistance === null
-                  ? selectedSegmentsText
-                  : challengePlayback.currentTurn === null
-                    ? `${challengePlayback.currentDistance}m`
-                    : challengePlayback.result === 'lose'
-                      ? t.failed
-                      : t.passed
-              }}
-            </span>
+            <span class="runner-tag">{{ soloRunnerTag }}</span>
             <span class="arm left-arm"></span>
             <span class="arm right-arm"></span>
             <span class="player-head"></span>
@@ -1007,73 +1135,76 @@ export default {
         <button
           class="primary solo-start-button"
           type="button"
-          :disabled="loading || !selectedSegments"
+          :disabled="loading || challengePlaybackLocked || !selectedSegments"
           @click="startChallenge"
         >
           {{ loading ? t.loading : t.startChallenge }}
         </button>
       </section>
 
-      <article class="entry-card challenge-result-card">
-        <div class="card-head">
-          <div>
-            <h2>{{ t.latestAttempt }}</h2>
+      <div v-if="latestAttemptVisible" class="latest-attempt-backdrop" @click="toggleLatestAttemptVisibility">
+        <article class="entry-card challenge-result-card floating-attempt-card" @click.stop>
+          <div class="card-head">
+            <div>
+              <h2>{{ t.latestAttempt }}</h2>
+            </div>
+            <button
+              v-if="latestAttempt"
+              class="ghost-action"
+              type="button"
+              @click="toggleLatestAttempt"
+            >
+              {{ latestAttemptExpanded ? t.hideDetails : t.showDetails }}
+            </button>
           </div>
-          <button
-            v-if="latestAttempt"
-            class="ghost-action"
-            type="button"
-            @click="toggleLatestAttempt"
-          >
-            {{ latestAttemptExpanded ? t.hideDetails : t.showDetails }}
-          </button>
-        </div>
-        <template v-if="latestAttempt">
-          <div class="result-box" :class="latestAttempt.result">
-            <span class="label">{{ t.result }}</span>
-            <strong>{{ latestAttempt.result === 'win' ? t.challengeWin : t.challengeLose }}</strong>
-            <p>{{ t.rewardMultiplier }}: {{ latestAttempt.multiplier }}x</p>
-          </div>
-
-          <div v-if="latestAttemptExpanded" class="attempt-expanded">
-            <div class="attempt-detail-grid">
-              <div class="attempt-detail-card">
-                <span class="label">{{ t.chosenSplit }}</span>
-                <strong>{{ formatSegments(latestAttempt.segments) }}</strong>
-              </div>
-              <div class="attempt-detail-card">
-                <span class="label">{{ t.systemTurns }}</span>
-                <strong>{{ formatSegments(latestAttempt.turn_values) }}</strong>
-              </div>
+          <template v-if="latestAttempt">
+            <div class="result-box" :class="latestAttempt.result">
+              <span class="label">{{ t.result }}</span>
+              <strong>{{ latestAttempt.result === 'win' ? t.challengeWin : t.challengeLose }}</strong>
+              <p>{{ t.rewardMultiplier }}: {{ latestAttempt.multiplier }}x</p>
             </div>
 
-            <div class="leaderboard-card comparison-card">
-              <span class="label">{{ t.comparisons }}</span>
-              <div class="leaderboard-list">
-                <div
-                  v-for="comparison in latestAttempt.comparisons"
-                  :key="comparison.index"
-                  class="leader-row"
-                  :class="comparison.passed ? 'won' : 'lost'"
-                >
-                  <div class="leader-main">
-                    <strong>#{{ comparison.index }}</strong>
-                    <span>
-                      {{ comparison.player }}m
-                      {{ comparison.passed ? '<=' : '>' }}
-                      {{ comparison.turn }}m
-                    </span>
-                  </div>
-                  <div class="leader-meta">
-                    <span>{{ comparison.passed ? t.passed : t.failed }}</span>
+            <div v-if="latestAttemptExpanded" class="attempt-expanded">
+              <div class="attempt-detail-grid">
+                <div class="attempt-detail-card">
+                  <span class="label">{{ t.chosenSplit }}</span>
+                  <strong>{{ formatSegments(latestAttempt.segments) }}</strong>
+                </div>
+                <div class="attempt-detail-card">
+                  <span class="label">{{ t.systemTurns }}</span>
+                  <strong>{{ formatSegments(latestAttempt.turn_values) }}</strong>
+                </div>
+              </div>
+
+              <div class="leaderboard-card comparison-card">
+                <span class="label">{{ t.comparisons }}</span>
+                <div class="leaderboard-list">
+                  <div
+                    v-for="comparison in latestAttempt.comparisons"
+                    :key="comparison.index"
+                    class="leader-row"
+                    :class="comparison.passed ? 'won' : 'lost'"
+                  >
+                    <div class="leader-main">
+                      <strong>#{{ comparison.index }}</strong>
+                      <span>
+                        {{ comparison.metric === 'segment' ? t.segmentTag : t.cumulativeTag }}
+                        {{ comparison.player }}m
+                        {{ comparison.passed ? '<=' : '>' }}
+                        {{ comparison.turn }}m
+                      </span>
+                    </div>
+                    <div class="leader-meta">
+                      <span>{{ comparison.passed ? t.passed : t.failed }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </template>
-        <p v-else class="room-list-empty">{{ t.attemptPending }}</p>
-      </article>
+          </template>
+          <p v-else class="room-list-empty">{{ t.attemptPending }}</p>
+        </article>
+      </div>
     </section>
 
     </template>

@@ -20,7 +20,7 @@ MAX_BOTS = 4
 MAX_HUMANS = 4
 ROOM_CODE_LENGTH = 6
 BOT_NAMES = ("Bolt", "Pixel", "Comet", "Milo")
-GAME_MIN_DISTANCE = 3
+GAME_MIN_DISTANCE = 6
 GAME_MAX_DISTANCE = 30
 GAME_SEGMENT_COUNT = 3
 GAME_TURN_MIN = 1
@@ -31,6 +31,7 @@ RoomStatus = Literal["waiting", "running", "finished"]
 PlayerType = Literal["human", "bot"]
 BotDifficulty = Literal["easy", "normal", "hard"]
 GameResult = Literal["win", "lose"]
+GameComparisonMetric = Literal["cumulative", "segment"]
 
 BOT_PROFILES: dict[BotDifficulty, dict[str, tuple[float, float] | float]] = {
     "easy": {
@@ -142,6 +143,8 @@ class GameComparison(BaseModel):
     index: int
     player: int
     turn: int
+    position: int
+    metric: GameComparisonMetric
     passed: bool
 
 
@@ -226,8 +229,8 @@ def validate_game_segments(target_distance: int, segments: list[int]) -> None:
             status_code=400,
             detail=f"segments must contain exactly {GAME_SEGMENT_COUNT} values",
         )
-    if any(segment <= 0 for segment in segments):
-        raise HTTPException(status_code=400, detail="segments must all be positive integers")
+    if any(segment < 0 for segment in segments):
+        raise HTTPException(status_code=400, detail="segments must all be non-negative integers")
     if sum(segments) != target_distance:
         raise HTTPException(status_code=400, detail="segments must sum to target_distance")
 
@@ -237,12 +240,12 @@ def generate_distance_combinations(distance: int, parts: int = GAME_SEGMENT_COUN
 
     def backtrack(remaining: int, slots_left: int, current: list[int]) -> None:
         if slots_left == 1:
-            if remaining > 0:
+            if remaining >= 0:
                 combinations.append([*current, remaining])
             return
 
-        max_value = remaining - (slots_left - 1)
-        for value in range(1, max_value + 1):
+        max_value = remaining
+        for value in range(0, max_value + 1):
             backtrack(remaining - value, slots_left - 1, [*current, value])
 
     backtrack(distance, parts, [])
@@ -250,9 +253,6 @@ def generate_distance_combinations(distance: int, parts: int = GAME_SEGMENT_COUN
 
 
 def build_turn_values(target_distance: int) -> list[int]:
-    if target_distance == GAME_SEGMENT_COUNT:
-        return list(range(GAME_TURN_MIN, target_distance + 1))
-
     checkpoints = sample(range(GAME_TURN_MIN, target_distance), GAME_SEGMENT_COUNT - 1)
     return [*sorted(checkpoints), target_distance]
 
@@ -268,12 +268,17 @@ def settle_game_round(target_distance: int, segments: list[int]) -> dict[str, An
     cumulative_distance = 0
     for index, (segment, turn_value) in enumerate(zip(segments, turn_values, strict=True)):
         cumulative_distance += segment
+        compared_value = cumulative_distance
         passed = cumulative_distance <= turn_value
+        position = cumulative_distance if passed else turn_value
+        metric: GameComparisonMetric = "cumulative"
         comparisons.append(
             {
                 "index": index + 1,
-                "player": cumulative_distance,
+                "player": compared_value,
                 "turn": turn_value,
+                "position": position,
+                "metric": metric,
                 "passed": passed,
             }
         )
@@ -678,7 +683,7 @@ def get_game_config_endpoint() -> GameConfigResponse:
         min_distance=GAME_MIN_DISTANCE,
         max_distance=GAME_MAX_DISTANCE,
         segment_count=GAME_SEGMENT_COUNT,
-        comparison_rule="less_than_or_equal",
+        comparison_rule="cumulative_less_than_or_equal_with_finish_win",
         random_min=GAME_TURN_MIN,
         random_max=GAME_MAX_DISTANCE,
         distance_multipliers=DISTANCE_MULTIPLIERS,
